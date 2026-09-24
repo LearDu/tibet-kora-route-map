@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>转山优先版草案地图 | G214+G318 往返 · 昆明—拉萨—珠峰—冈仁波齐</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; font-family:"Microsoft YaHei","PingFang SC",sans-serif; }
+  #map { height:100%; width:100%; }
+  .panel {
+    position:absolute; top:12px; left:12px; z-index:1000; background:rgba(255,255,255,.96);
+    border-radius:12px; box-shadow:0 4px 18px rgba(0,0,0,.25); width:335px; max-height:calc(100% - 24px);
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .panel h1 { font-size:15px; padding:12px 14px 6px; color:#1f2937; }
+  .panel .sub { font-size:11px; color:#6b7280; padding:0 14px 8px; line-height:1.5; }
+  .legend { display:flex; gap:10px; padding:6px 14px 10px; border-bottom:1px solid #e5e7eb; flex-wrap:wrap; }
+  .legend span { font-size:11px; display:flex; align-items:center; gap:4px; }
+  .swatch { width:22px; height:4px; border-radius:2px; display:inline-block; }
+  .daylist { overflow-y:auto; flex:1; }
+  .dayitem { padding:7px 12px; border-bottom:1px solid #f1f5f9; cursor:pointer; display:flex; gap:8px; align-items:flex-start; }
+  .dayitem:hover { background:#f8fafc; }
+  .dayitem.active { background:#eff6ff; border-left:3px solid #2563eb; }
+  .dnum { min-width:34px; height:20px; border-radius:10px; color:#fff; font-size:11px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; margin-top:2px; }
+  .dinfo { font-size:12px; line-height:1.45; }
+  .dinfo b { color:#111827; }
+  .dinfo small { color:#6b7280; display:block; }
+  .num-marker {
+    border-radius:50%; color:#fff; font-weight:700; font-size:11px; text-align:center;
+    border:2px solid #fff; box-shadow:0 1px 5px rgba(0,0,0,.45);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .leaflet-popup-content { font-size:12px; line-height:1.6; max-width:270px; }
+  .leaflet-popup-content b.t { font-size:13px; }
+  .warn { color:#b45309; }
+  #paneltoggle { display:none; position:absolute; top:8px; right:8px; z-index:1002;
+    background:#2563eb; color:#fff; border:none; border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; }
+  @media (max-width:640px){
+    .panel{ width:calc(100% - 20px); left:10px; top:10px; max-height:78%; transition:max-height .25s ease; }
+    .panel.collapsed{ max-height:46px; }
+    .panel.collapsed .sub, .panel.collapsed .legend, .panel.collapsed .daylist{ display:none; }
+    #paneltoggle{ display:block; }
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel">
+  <button id="paneltoggle">☰ 行程</button>
+  <h1>转山优先版 · G214+G318 往返草案</h1>
+  <div class="sub"><b style="color:#2563eb">v2 转山优先版 · 2026-09-24 更新（若标题仍显示"G219回/18天"，请按 Ctrl+F5 强制刷新）</b><br>去程赶路（日均800–1000km，2–3司机轮换）→ 珠峰 → 冈仁波齐转山3天 → 返程玩景点（日均500–800km）<br>
+  2026-10-02 出发 · 14 天 · 10-15 到昆明 · 8人2车 · 已锁定：珠峰日落优先、转山3天<br>
+  <span class="warn">⚠ 示意图：连线为直线示意，非实际道路轨迹；红蓝线重合段为原路往返；里程/时长为保守估计</span></div>
+  <div class="legend">
+    <span><i class="swatch" style="background:#2563eb"></i>去程赶路（D1–6）</span>
+    <span><i class="swatch" style="background:#7c3aed"></i>转山（D7–9）</span>
+    <span><i class="swatch" style="background:#dc2626"></i>返程游览（D10–14）</span>
+  </div>
+  <div class="daylist" id="daylist"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+var map = L.map('map',{zoomControl:true}).setView([29.4, 91.5], 6);
+var gaode = L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',{
+  subdomains:['1','2','3','4'], maxZoom:18, attribution:'© 高德地图 AutoNavi'}).addTo(map);
+var osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'});
+var sat = L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',{
+  subdomains:['1','2','3','4'], maxZoom:18, attribution:'© 高德影像'});
+L.control.layers({'高德路网':gaode,'高德影像':sat,'OpenStreetMap':osm},null,{position:'topright'}).addTo(map);
+L.control.scale({imperial:false}).addTo(map);
+
+var C_OUT='#2563eb', C_KORA='#7c3aed', C_BACK='#dc2626';
+
+var days = [
+ {d:'D1', date:'10/2', name:'昆明 → 德钦（飞来寺）', lat:28.470, lng:98.910, color:C_OUT,
+  txt:'<b class="t">D1 · 10/2 昆明→德钦飞来寺</b><br>约 800 km / 10–11 h，纯赶路（大理丽江不停）<br>🏨 飞来寺（约3400 m）<br>2–3 名司机轮换，每 2 h 换班'},
+ {d:'D2', date:'10/3', name:'德钦 → 然乌', lat:29.490, lng:96.630, color:C_OUT,
+  txt:'<b class="t">D2 · 10/3 德钦→然乌</b><br>⭐ 清晨梅里雪山日照金山（飞来寺观景台，约7:30）<br>约 530 km / 9–10 h：盐井、芒康、东达山5130 m、怒江72拐<br>🏨 然乌（约3900 m）'},
+ {d:'D3', date:'10/4', name:'然乌 → 拉萨', lat:29.656, lng:91.110, color:C_OUT,
+  txt:'<b class="t">D3 · 10/4 然乌→拉萨</b><br>⭐ 早上然乌湖 2 h（日出+湖边）<br>约 770 km / 10 h 直达拉萨<br>🏨 拉萨（3650 m）<br><span class="warn">⚠ 达孜甘丹寺与当日赶路冲突，只能路过；想去需牺牲 D4 珠峰日落</span>'},
+ {d:'D4', date:'10/5', name:'拉萨 → 珠峰大本营', lat:28.150, lng:86.850, color:C_OUT,
+  txt:'<b class="t">D4 · 10/5 拉萨→珠峰大本营</b><br>约 600 km / 10 h：日喀则、拉孜、加乌拉山口（5座8000 m级群峰）<br>⭐ 珠峰日落金山<br>🏨 巴松村（约4200 m）<br><span class="warn">⚠ 不建议住绒布寺（5000 m），压高反</span>'},
+ {d:'D5', date:'10/6', name:'珠峰 → 萨嘎', lat:29.329, lng:85.234, color:C_OUT,
+  txt:'<b class="t">D5 · 10/6 珠峰→萨嘎</b><br>⭐ 珠峰日出<br>约 400 km / 6 h：佩枯措、远观希夏邦马<br>🏨 萨嘎（约4500 m），下午休整适应'},
+ {d:'D6', date:'10/7', name:'萨嘎 → 塔钦', lat:30.968, lng:81.312, color:C_OUT,
+  txt:'<b class="t">D6 · 10/7 萨嘎→塔钦</b><br>约 500 km / 7 h<br>⭐ 下午玛旁雍措 + 拉昂措，远观冈仁波齐、纳木那尼<br>🏨 塔钦（约4700 m），早休备转山'},
+ {d:'D7', date:'10/8', name:'转山D1 塔钦→止热寺', lat:31.114, lng:81.270, color:C_KORA,
+  txt:'<b class="t">D7 · 10/8 转山第一天</b><br>🥾 徒步 20 km / 6–8 h：经幡广场、曲古寺、仰观冈仁波齐西壁<br>🏨 止热寺（约5100 m，大通铺）'},
+ {d:'D8', date:'10/9', name:'转山D2 止热寺→卓玛拉→尊珠寺', lat:31.080, lng:81.250, color:C_KORA,
+  txt:'<b class="t">D8 · 10/9 转山第二天</b><br>🥾 徒步约 24 km / 9–11 h，翻卓玛拉垭口 5630 m（全程体能巅峰）<br>🏨 尊珠寺一带<br><span class="warn">⚠ 10月中垭口或有冰雪，备撤退预案</span>'},
+ {d:'D9', date:'10/10', name:'转山D3 尊珠寺→塔钦', lat:31.030, lng:81.275, color:C_KORA,
+  txt:'<b class="t">D9 · 10/10 转山第三天</b><br>🥾 徒步约 8 km / 2–3 h 回到塔钦，转山圆满<br>下午休整恢复，或玛旁雍措日落<br>🏨 塔钦（4700 m）'},
+ {d:'D10', date:'10/11', name:'塔钦 → 拉孜（返程开始）', lat:29.080, lng:87.630, color:C_BACK,
+  txt:'<b class="t">D10 · 10/11 塔钦→拉孜</b><br>约 750 km / 11 h，返程最长驾驶日（司机轮换）<br>🏨 拉孜（约4200 m）<br>节奏：重驾驶，转山后车上恢复'},
+ {d:'D11', date:'10/12', name:'拉孜 → 日喀则 → 羊湖 → 拉萨', lat:28.950, lng:90.700, color:C_BACK,
+  txt:'<b class="t">D11 · 10/12 拉孜→拉萨</b><br>约 550 km / 8 h + 游览<br>⭐ 上午扎什伦布寺（日喀则，约2 h）<br>⭐ 下午羊卓雍措（岗巴拉山口观景台）<br>🏨 拉萨（3650 m）'},
+ {d:'D12', date:'10/13', name:'拉萨 → 然乌', lat:29.495, lng:96.635, color:C_BACK,
+  txt:'<b class="t">D12 · 10/13 拉萨→然乌</b><br>约 770 km / 10 h（G318东行）<br>📷 色季拉山口远眺南迦巴瓦（天气好则停20分钟）<br>🏨 然乌（3900 m）'},
+ {d:'D13', date:'10/14', name:'然乌 → 香格里拉', lat:27.835, lng:99.715, color:C_BACK,
+  txt:'<b class="t">D13 · 10/14 然乌→香格里拉</b><br>约 630 km / 9–10 h：72拐、东达山、芒康<br>🏨 香格里拉（3300 m）<br>节奏：重驾驶'},
+ {d:'D14', date:'10/15', name:'香格里拉 → 昆明', lat:25.040, lng:102.710, color:C_BACK,
+  txt:'<b class="t">D14 · 10/15 香格里拉→昆明</b><br>约 600 km / 8 h<br>🏠 到家（第14天，符合"14天回昆明"）'}
+];
+
+var waypoints = [
+ {n:'大理', lat:25.606, lng:100.268},
+ {n:'丽江', lat:26.872, lng:100.230},
+ {n:'香格里拉', lat:27.830, lng:99.710},
+ {n:'盐井', lat:29.040, lng:98.600},
+ {n:'芒康', lat:29.680, lng:98.590},
+ {n:'左贡', lat:29.670, lng:97.840},
+ {n:'八宿', lat:30.050, lng:96.920},
+ {n:'波密', lat:29.860, lng:95.770},
+ {n:'林芝', lat:29.650, lng:94.360},
+ {n:'甘丹寺（达孜·可选）', lat:29.760, lng:91.470},
+ {n:'日喀则·扎什伦布寺', lat:29.270, lng:88.880},
+ {n:'定日', lat:28.660, lng:87.120},
+ {n:'加乌拉山口', lat:28.310, lng:86.990},
+ {n:'岗嘎', lat:28.632, lng:86.617},
+ {n:'佩枯措', lat:28.850, lng:85.650},
+ {n:'帕羊', lat:30.070, lng:83.950},
+ {n:'玛旁雍措', lat:30.660, lng:81.470},
+ {n:'卓玛拉垭口5630m', lat:31.090, lng:81.250},
+ {n:'羊卓雍措观景台', lat:29.180, lng:90.610}
+];
+
+// 去程（蓝）：昆明→大理→丽江→香格里拉→德钦→盐井→芒康→左贡→八宿→然乌→波密→林芝→拉萨→日喀则→拉孜→定日→珠峰
+var routeOut = [
+ [25.040,102.710],[25.606,100.268],[26.872,100.230],[27.830,99.710],[28.470,98.910],
+ [29.040,98.600],[29.680,98.590],[29.620,98.350],[29.670,97.840],[30.050,96.920],
+ [29.490,96.630],[29.860,95.770],[29.650,94.360],[29.880,93.250],[29.656,91.110],
+ [29.350,90.730],[29.270,88.880],[29.080,87.630],[28.660,87.120],[28.310,86.990],[28.150,86.850]
+];
+// D5-D6 珠峰→萨嘎→塔钦（蓝）
+var routeAli = [
+ [28.150,86.850],[28.310,86.990],[28.632,86.617],[28.850,85.650],[29.329,85.234],
+ [30.070,83.950],[30.660,81.470],[30.968,81.312]
+];
+// 转山小环（紫虚线）：塔钦→止热寺→卓玛拉→尊珠寺→塔钦
+var routeKora = [[30.968,81.312],[31.114,81.270],[31.090,81.250],[31.030,81.275],[30.968,81.312]];
+// 返程（红）：塔钦→萨嘎→拉孜→日喀则→羊湖→拉萨→林芝→波密→然乌→八宿→左贡→芒康→德钦→香格里拉→丽江→大理→昆明
+// 与去程重合段 lat +0.07 偏移以便双线可见
+var off = 0.07;
+var routeBack = [
+ [30.968,81.312],[30.070,83.950],[29.329,85.234],[29.080,87.630],[29.270,88.880],
+ [29.180,90.610],[28.950,90.700],[29.656,91.110+off],[29.880,93.250+off],[29.650,94.360+off],
+ [29.860,95.770+off],[29.490,96.630+off],[30.050,96.920+off],[29.670,97.840+off],[29.680,98.590+off],
+ [28.470,98.910+off],[27.830,99.710+off],[26.872,100.230+off],[25.606,100.268+off],[25.040,102.710]
+];
+
+L.polyline(routeOut,{color:C_OUT,weight:4,opacity:.85}).addTo(map);
+L.polyline(routeAli,{color:C_OUT,weight:4,opacity:.85}).addTo(map);
+L.polyline(routeKora,{color:C_KORA,weight:3.5,dashArray:'5,5',opacity:.95}).addTo(map);
+L.polyline(routeBack,{color:C_BACK,weight:3.5,dashArray:'9,6',opacity:.85}).addTo(map);
+
+var dayMarkers = [];
+days.forEach(function(day,i){
+  var icon = L.divIcon({className:'', html:'<div class="num-marker" style="width:26px;height:26px;background:'+day.color+'">'+day.d.replace('D','')+'</div>',
+    iconSize:[26,26], iconAnchor:[13,13]});
+  var m = L.marker([day.lat,day.lng],{icon:icon}).addTo(map).bindPopup(day.txt);
+  dayMarkers.push(m);
+});
+waypoints.forEach(function(w){
+  L.circleMarker([w.lat,w.lng],{radius:4,color:'#fff',weight:1.5,fillColor:'#64748b',fillOpacity:.95})
+    .addTo(map).bindTooltip(w.n,{direction:'top',offset:[0,-4]});
+});
+
+var list = document.getElementById('daylist');
+days.forEach(function(day,i){
+  var el = document.createElement('div');
+  el.className='dayitem';
+  el.innerHTML = '<div class="dnum" style="background:'+day.color+'">'+day.d+'</div>'+
+    '<div class="dinfo"><b>'+day.date+' '+day.name+'</b><small>'+
+    day.txt.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').slice(0,44)+'…</small></div>';
+  el.onclick = function(){
+    document.querySelectorAll('.dayitem').forEach(function(x){x.classList.remove('active')});
+    el.classList.add('active');
+    map.flyTo([day.lat,day.lng], 9, {duration:.8});
+    dayMarkers[i].openPopup();
+  };
+  list.appendChild(el);
+});
+
+map.fitBounds(L.latLngBounds(routeOut.concat(routeAli).concat(routeBack)).pad(0.06));
+
+// 手机端：行程面板可折叠，默认折叠
+var pt = document.getElementById('paneltoggle'), panel = document.querySelector('.panel');
+function syncToggle(){ pt.textContent = panel.classList.contains('collapsed') ? '☰ 行程' : '✕ 收起'; }
+if (window.innerWidth <= 640) { panel.classList.add('collapsed'); }
+syncToggle();
+pt.onclick = function(){ panel.classList.toggle('collapsed'); syncToggle(); };
+</script>
+</body>
+</html>
